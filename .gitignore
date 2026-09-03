@@ -1,0 +1,12 @@
+# === VS Code ===
+# Игнорируем локальные настройки, кроме tasks.json (если он нужен команде)
+.vscode/*
+.vscode/tasks.json
+.vscode/launch.json
+# Локальная история и кэш расширений
+.history/
+*.code-workspace
+
+build/
+build/*
+build
