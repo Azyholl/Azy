@@ -4,7 +4,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <utility>
-#include <memory>          // для std::unique_ptr
+#include <memory>
 #include <iostream>
 #include "Token.h"
 
