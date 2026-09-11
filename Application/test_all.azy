@@ -6,5 +6,6 @@ if (a == 10 && b != 3.14) {
 } else {
     flag = true || false;
 }
-print("hello_world! ")
-print.ln("Hello world with close tab!")
+print("hello_world! ");
+print.ln("Hello world with close tab!");
+print.ln(42 + x * 2);

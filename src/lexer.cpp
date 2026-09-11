@@ -88,7 +88,7 @@ Token gettok(FILE *stream) {
     }
 
     // 3. Обработка комментариев
-    if (LastChar == '#') {
+    if (LastChar == '#' || (LastChar == '/' && peek_next(stream) == '/')) {
         do {
             LastChar = next_char(stream, current_line, current_col);
         } while (LastChar != EOF && LastChar != '\n' && LastChar != '\r');
@@ -98,6 +98,24 @@ Token gettok(FILE *stream) {
         }
         return {TokenType::Unknown, "", token_line, token_col};
     }
+
+    if (LastChar == '/' && peek_next(stream) == '*') {
+    LastChar = next_char(stream, current_line, current_col);
+    LastChar = next_char(stream, current_line, current_col);
+
+    while (true) {
+        if (LastChar == EOF) {
+            return {TokenType::Unknown, "", token_line, token_col};
+        }
+        if (LastChar == '*' && peek_next(stream) == '/') {
+            LastChar = next_char(stream, current_line, current_col);
+            LastChar = next_char(stream, current_line, current_col);
+            break;
+        }
+        LastChar = next_char(stream, current_line, current_col);
+    }
+    return gettok(stream);
+}
 
     // 4. Строки в кавычках
     if (LastChar == '"') {
@@ -137,7 +155,15 @@ Token gettok(FILE *stream) {
     } else if (c == '|' && LastChar == '|') {
         opStr += '|';
         LastChar = next_char(stream, current_line, current_col);
+    } else if (c == '+' && LastChar == '+') {   // ← ДОБАВИТЬ
+        opStr += '+';
+        LastChar = next_char(stream, current_line, current_col);
+    } else if (c == '-' && LastChar == '-') {   // ← ДОБАВИТЬ
+        opStr += '-';
+        LastChar = next_char(stream, current_line, current_col);
     }
+
+    
 
     TokenType type = TokenType::Operator;
     if (!ispunct(static_cast<unsigned char>(c))) {
