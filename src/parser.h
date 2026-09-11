@@ -17,6 +17,12 @@ struct ASTNode {
 
 struct ExpressionNode : ASTNode {};
 
+struct ExpressionStatementNode : ASTNode {
+    std::unique_ptr<ExpressionNode> expr;
+    ExpressionStatementNode(std::unique_ptr<ExpressionNode> e)
+        : expr(std::move(e)) {}
+};
+
 // Узлы для операторов
 struct BlockNode : ASTNode {
     std::vector<std::unique_ptr<ASTNode>> statements;
@@ -24,9 +30,12 @@ struct BlockNode : ASTNode {
 
 struct AssignmentNode : ASTNode {
     std::string varName;
+    std::string op;
     std::unique_ptr<ExpressionNode> expr;
-    AssignmentNode(std::string name, std::unique_ptr<ExpressionNode> e)
-        : varName(name), expr(std::move(e)) {}
+
+    AssignmentNode(std::string name, std::string operation,
+                   std::unique_ptr<ExpressionNode> e)
+        : varName(std::move(name)), op(std::move(operation)), expr(std::move(e)) {}
 };
 
 struct IfNode : ASTNode {
@@ -69,6 +78,11 @@ struct ForNode : ASTNode {
     ForNode() = default;
 };
 
+// Узлы прерывания цикла
+struct BreakNode : ASTNode { };
+
+struct ContinueNode : ASTNode { };
+
 // Узел вывода текста
 struct PrintNode : ASTNode {
     std::unique_ptr<ExpressionNode> expr;
@@ -79,7 +93,7 @@ struct PrintNode : ASTNode {
 
 // Узлы для выражений
 struct LiteralNode : ExpressionNode {
-    enum Type { Int, Float, String };
+    enum Type { Int, Float, String, Bool };
     Type type;
     std::string value;
     LiteralNode(Type t, const std::string& val) : type(t), value(val) {}
@@ -144,8 +158,10 @@ public:
             std::cout << pad << "}\n";
         }
         else if (auto assign = dynamic_cast<const AssignmentNode*>(node)) {
-            std::cout << pad << "Assignment: " << assign->varName << " = ";
-            printAST(assign->expr.get(), 0); // выражение печатаем без отступа, или с тем же
+            std::cout << pad << "Assignment: " << assign->varName
+                    << " " << assign->op << " ";
+            printAST(assign->expr.get(), 0);
+            std::cout << "\n";
         }
         else if (auto ifNode = dynamic_cast<const IfNode*>(node)) {
             std::cout << pad << "If (";
@@ -179,19 +195,44 @@ public:
                 std::cout << ") {\n";
             } else {
                 std::cout << pad << "For (" << forNode->varName << ":\n";
+
+                // init
                 std::cout << pad << "  init: ";
-                if (forNode->init) printAST(forNode->init.get(), 0);
-                else std::cout << forNode->varName << " = 0";
-                std::cout << "\n" << pad << "  cond: ";
-                if (forNode->condition) printAST(forNode->condition.get(), 0);
-                else std::cout << "null";
-                std::cout << "\n" << pad << "  step: ";
-                if (forNode->step) printAST(forNode->step.get(), 0);
-                else std::cout << forNode->varName << "++";
+                if (forNode->init) {
+                    printAST(forNode->init.get(), 0); 
+                } else { 
+                    std::cout << forNode->varName << " = 0\n"; 
+                }
+
+                // cond
+                std::cout << pad << "  cond: ";
+                if (forNode->condition) {
+                    printAST(forNode->condition.get(), 0);
+                } else {
+                    std::cout << "null";
+                }
                 std::cout << "\n";
+
+                // step
+                std::cout << pad << "  step: ";
+                if (forNode->step) {
+                    printAST(forNode->step.get(), 0);
+                    if (dynamic_cast<const AssignmentNode*>(forNode->step.get()) == nullptr) {
+                        std::cout << "\n";
+                    }
+                } else {
+                    std::cout << forNode->varName << "++\n";
+                }
+                std::cout << pad << ") {\n";
             }
             printAST(forNode->body.get(), indent + 1);
             std::cout << pad << "}\n";
+        }
+        else if (dynamic_cast<const BreakNode*>(node)) {
+            std::cout << pad << "Break\n";
+        }
+        else if (dynamic_cast<const ContinueNode*>(node)) {
+            std::cout << pad << "Continue\n";
         }
         else if (auto printNode = dynamic_cast<const PrintNode*>(node)) {
             std::cout << pad << "Print" << (printNode->newline ? ".ln" : "") << " (";
@@ -204,6 +245,7 @@ public:
                 case LiteralNode::Int:   std::cout << "int"; break;
                 case LiteralNode::Float: std::cout << "float"; break;
                 case LiteralNode::String:std::cout << "string"; break;
+                case LiteralNode::Bool:  std::cout << "bool"; break;
             }
             std::cout << ", \"" << literal->value << "\")";
         }
@@ -221,6 +263,10 @@ public:
             std::cout << ", ";
             printAST(binary->right.get(), 0);
             std::cout << ")";
+        }
+        else if (auto exprStmt = dynamic_cast<const ExpressionStatementNode*>(node)) {
+            printAST(exprStmt->expr.get(), indent);
+            std::cout << "\n";   // перенос после statement
         }
         else {
             std::cout << pad << "Unknown node\n";
@@ -250,6 +296,7 @@ public:
 
     std::unique_ptr<ASTNode> parseIf();
     std::unique_ptr<ASTNode> parseElse();
+
     std::unique_ptr<ASTNode> parseWhile();
     std::unique_ptr<ASTNode> parseDoWhile();
 
@@ -258,7 +305,12 @@ public:
     std::unique_ptr<ASTNode> parseForStep();
     std::unique_ptr<ASTNode> parseForBody();
 
+    std::unique_ptr<ASTNode> parseBreak();
+    std::unique_ptr<ASTNode> parseContinue();
+
     std::unique_ptr<ASTNode> parseAssignment();
+
+    std::unique_ptr<ASTNode> parsePostfixStatement();
 
     std::unique_ptr<ASTNode> parsePrint();
 

@@ -4,15 +4,17 @@
 #include "lexer.h"
 #include "parser.h"
 
-void processToken(const Token& tok) {
-    if(tok.type != TokenType::Unknown){
-    std::cout << "[Парсер получил] Тип: " << tok.type
-              << ", Значение: \"" << tok.value 
-              << "\", Строка: " << tok.line 
-              << ", Символ: " << tok.column << "\n";
-}
-    else {
-        std::cout << ", Значение: \"" << tok.value << "\" Ошибка в строке: "  << tok.line  << ", символ: " << tok.column << "\n";
+void processToken(const Token& tok, bool flag = false) {
+    if (flag){
+        if(tok.type != TokenType::Unknown){
+            std::cout << "[Парсер получил] Тип: " << tok.type
+                    << ", Значение: \"" << tok.value 
+                    << "\", Строка: " << tok.line 
+                    << ", Символ: " << tok.column << "\n";
+        }
+        else {
+            std::cout << ", Значение: \"" << tok.value << "\" Ошибка в строке: "  << tok.line  << ", символ: " << tok.column << "\n";
+        }
     }
 }
 

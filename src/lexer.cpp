@@ -155,11 +155,23 @@ Token gettok(FILE *stream) {
     } else if (c == '|' && LastChar == '|') {
         opStr += '|';
         LastChar = next_char(stream, current_line, current_col);
-    } else if (c == '+' && LastChar == '+') {   // ← ДОБАВИТЬ
+    } else if (c == '+' && LastChar == '+') {
         opStr += '+';
         LastChar = next_char(stream, current_line, current_col);
-    } else if (c == '-' && LastChar == '-') {   // ← ДОБАВИТЬ
+    } else if (c == '+' && LastChar == '=') {
+        opStr += '=';
+        LastChar = next_char(stream, current_line, current_col);
+    } else if (c == '-' && LastChar == '-') {
         opStr += '-';
+        LastChar = next_char(stream, current_line, current_col);
+    } else if (c == '-' && LastChar == '=') {
+        opStr += '=';
+        LastChar = next_char(stream, current_line, current_col);
+    } else if (c == '*' && LastChar == '=') {
+        opStr += '=';
+        LastChar = next_char(stream, current_line, current_col);
+    } else if (c == '/' && LastChar == '=') {
+        opStr += '=';
         LastChar = next_char(stream, current_line, current_col);
     }
 

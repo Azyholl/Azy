@@ -54,13 +54,14 @@ void Parser::Close_block(){
 std::unique_ptr<ASTNode> Parser::parse() {
     auto block = std::make_unique<BlockNode>();
     while (currentPos < tokens.size()) {
+        size_t before = currentPos;
         auto stmt = parseStatement();
         if (stmt) {
             block->statements.push_back(std::move(stmt));
-        } else {
-            // Если оператор не распознан – ошибка, но parseStatement уже вызовет parserError
-            break;
+        } else if (currentPos == before) {
+            consume();   // защита от зацикливания
         }
+        // else: stmt == nullptr, но позиция сдвинулась — продолжаем
     }
     return block;
 }
@@ -77,13 +78,30 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
         return parseWhile();
     } else if (check(TokenType::Identifier, "for")) {
         return parseFor();
+    } else if (check(TokenType::Identifier, "break")) {
+        return parseBreak();
+    } else if (check(TokenType::Identifier, "continue")) {      
+        return parseContinue();
     } else if (check(TokenType::Identifier, "print")) {
         return parsePrint();
-    } else if (peek().type == TokenType::Identifier && checkNext(TokenType::Operator, "=")) {
-        return parseAssignment();
-    } else {
-        //parserError(peek(), "Синтаксическая ошибка: неожиданный токен '" + peek().value + "'");
-        consume(); // чтобы избежать бесконечного цикла
+
+    } else if (peek().type == TokenType::Identifier &&
+            (checkNext(TokenType::Operator, "=")  ||
+             checkNext(TokenType::Operator, "+=") ||
+             checkNext(TokenType::Operator, "-=") ||
+             checkNext(TokenType::Operator, "*=") ||
+             checkNext(TokenType::Operator, "/="))
+        ) {
+            return parseAssignment();
+    } else if (peek().type == TokenType::Identifier &&
+            (checkNext(TokenType::Operator, "++") ||
+                checkNext(TokenType::Operator, "--"))) {
+        return parsePostfixStatement();
+    } 
+    else {
+        std::cerr << "[Парсер] Пропущен неожиданный токен: '"
+                << peek().value << "' (строка " << peek().line << ")\n";
+        consume();
         return nullptr;
     }
 }
@@ -116,7 +134,7 @@ std::unique_ptr<ASTNode> Parser::parseDoWhile() {
     Token token = consume(); // "do"
 
     std::unique_ptr<ASTNode> body;
-    if (peek().value == "{") {
+    if (peek().value == "{") { 
         body = parseBlock();
     } else {
         parserError(peek(), "Ожидался блок кода '{...}' после 'do'");
@@ -136,6 +154,7 @@ std::unique_ptr<ASTNode> Parser::parseDoWhile() {
             return nullptr;
         }
         consume(); // ')'
+        Close_block();
         return std::make_unique<DoWhileNode>(std::move(body), std::move(condition));
     } else {
         parserError(peek(), "Ожидался идентификатор 'while' после блока кода");
@@ -221,8 +240,7 @@ std::unique_ptr<ASTNode> Parser::parseFor() {
 
     // ================== ФОРМА 1: for (i == x) ==================
     if (next.type == TokenType::Operator && next.value == "==") {
-        consume(); // i
-        consume(); // ==
+        // ВАЖНО: НЕ consume() — пусть parseLogicalOr() сам разберёт "i == 5"
         auto cond = parseLogicalOr();
         if (!cond) return nullptr;
 
@@ -289,6 +307,16 @@ std::unique_ptr<ASTNode> Parser::parseFor() {
     return nullptr;
 }
 
+// Отдельный оператор: i++;  или  i--;
+std::unique_ptr<ASTNode> Parser::parsePostfixStatement() {
+    Token name = consume();
+    std::string op = consume().value;
+    auto var = std::make_unique<VariableNode>(name.value);
+    Close_block();
+    auto unary = std::make_unique<UnaryOpNode>(op + "_post", std::move(var));
+    return std::make_unique<ExpressionStatementNode>(std::move(unary));
+}
+
 // init в полной форме: i = <expr>
 std::unique_ptr<ASTNode> Parser::parseForInit() {
     if (peek().type != TokenType::Identifier) {
@@ -302,7 +330,7 @@ std::unique_ptr<ASTNode> Parser::parseForInit() {
     }
     consume(); // '='
     auto expr = parseLogicalOr();
-    return std::make_unique<AssignmentNode>(name, std::move(expr));
+    return std::make_unique<AssignmentNode>(name, "=", std::move(expr));
 }
 
 // step в полной форме: i++ / i-- / i = expr
@@ -324,7 +352,7 @@ std::unique_ptr<ASTNode> Parser::parseForStep() {
     if (check(TokenType::Operator, "=")) {
         consume();
         auto expr = parseLogicalOr();
-        return std::make_unique<AssignmentNode>(name, std::move(expr));
+        return std::make_unique<AssignmentNode>(name, "=", std::move(expr));
     }
 
     parserError(peek(), "Ожидался '++', '--' или '=' в шаге for");
@@ -340,6 +368,19 @@ std::unique_ptr<ASTNode> Parser::parseForBody() {
     return parseBlock();
 }
 
+// break;
+std::unique_ptr<ASTNode> Parser::parseBreak() {
+    consume();          // "break"
+    Close_block();      // ';'
+    return std::make_unique<BreakNode>();
+}
+
+// continue;
+std::unique_ptr<ASTNode> Parser::parseContinue() {
+    consume();          // "continue"
+    Close_block();      // ';'
+    return std::make_unique<ContinueNode>();
+}
 
 // Узел If (BinaryOpNode) {Block_code}
 std::unique_ptr<ASTNode> Parser::parseIf() {
@@ -423,10 +464,10 @@ std::unique_ptr<ASTNode> Parser::parsePrint() {
 // Identificator = parseLogicalOr
 std::unique_ptr<ASTNode> Parser::parseAssignment() {
     Token varName = consume(); // идентификатор
-    consume(); // '='
+    std::string op = consume().value;
     auto expr = parseLogicalOr();
     Close_block();
-    return std::make_unique<AssignmentNode>(varName.value, std::move(expr));
+    return std::make_unique<AssignmentNode>(varName.value, op, std::move(expr));
 }
 
 // ============================================================
@@ -545,6 +586,10 @@ std::unique_ptr<ExpressionNode> Parser::parsePrimary() {
         return std::make_unique<LiteralNode>(LiteralNode::String, tok.value);
     } else if (tok.type == TokenType::Identifier) {
         consume();
+        if (tok.value == "true" || tok.value == "false") {
+            return std::make_unique<LiteralNode>(LiteralNode::Bool, tok.value);
+        }
+
         auto var = std::make_unique<VariableNode>(tok.value);
         if (peek().value == "++" || peek().value == "--") {
             std::string op = consume().value;
